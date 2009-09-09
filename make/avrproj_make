@@ -33,7 +33,7 @@
 
 ###### BLOCK 4) this defines the aims of the make process ######
 
-all:	$(TRG).elf $(TRG).cof $(TRG).bin $(TRG).hex $(TRG).eep $(TRG).ok
+all:	$(TRG).elf $(TRG).bin $(TRG).hex $(TRG).eep $(TRG).ok
 
 
 ###### BLOCK 5) compile: instructions to create assembler and/or object files from C source ######
@@ -72,14 +72,6 @@ all:	$(TRG).elf $(TRG).cof $(TRG).bin $(TRG).hex $(TRG).eep $(TRG).ok
 %.eep: %.elf
 	$(OBJCOPY) -j .eeprom --set-section-flags=.eeprom="alloc,load" --change-section-lma .eeprom=0 -O $(FORMAT) $< $@
 
-%.cof: %.elf
-	$(OBJCOPY) --debugging -O coff-ext-avr \
-		--change-section-address   .data-0x800000 \
-		--change-section-address    .bss-0x800000 \
-		--change-section-address .noinit-0x800000 \
-		--change-section-address .eeprom-0x810000 \
-		$< $@
-
 
 ###### BLOCK 10) If all other steps compile ok then echo "Errors: none" ######
 
@@ -96,7 +88,6 @@ clean:
 	$(RM) $(SRC:.c=.lst)
 	$(RM) $(TRG).map
 	$(RM) $(TRG).elf
-	$(RM) $(TRG).cof
 	$(RM) $(TRG).obj
 	$(RM) $(TRG).a90
 	$(RM) $(TRG).sym
