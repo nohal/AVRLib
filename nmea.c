@@ -35,6 +35,8 @@
 
 #include "nmea.h"
 
+#include "hd44780.h"
+
 // Program ROM constants
 
 // Global variables
@@ -122,14 +124,28 @@ u08 nmeaProcess(cBuffer* rxBuffer)
 	if(foundpacket)
 	{
 		// check message type and process appropriately
-		if(!strncmp(NmeaPacket, "GPGGA", 5))
+		if(!strncmp(NmeaPacket + 2, "GGA", 3))
 		{
 			// process packet of this type
 			nmeaProcessGPGGA(NmeaPacket);
 			// report packet type
 			foundpacket = NMEA_GPGGA;
 		}
-		else if(!strncmp(NmeaPacket, "GPVTG", 5))
+		else if(!strncmp(NmeaPacket + 2, "GLL", 3))
+		{
+			// process packet of this type
+			nmeaProcessGPGLL(NmeaPacket);
+			// report packet type
+			foundpacket = NMEA_GPGLL;
+		}
+		else if(!strncmp(NmeaPacket + 2, "RMC", 3))
+		{
+			// process packet of this type
+			nmeaProcessGPRMC(NmeaPacket);
+			// report packet type
+			foundpacket = NMEA_GPRMC;
+		}
+		else if(!strncmp(NmeaPacket + 2, "VTG", 3))
 		{
 			// process packet of this type
 			nmeaProcessGPVTG(NmeaPacket);
@@ -174,10 +190,12 @@ void nmeaProcessGPGGA(u08* packet)
 	minutesfrac = modf(GpsInfo.PosLLA.lat.f/100, &degrees);
 	GpsInfo.PosLLA.lat.f = degrees + (minutesfrac*100)/60;
 	// convert to radians
+	#ifdef NMEA_CONVERT_RADIANS
 	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
 	while(packet[i++] != ',');				// next field: N/S indicator
 	
-	// correct latitute for N/S
+	// correct latitude for N/S
 	if(packet[i] == 'S') GpsInfo.PosLLA.lat.f = -GpsInfo.PosLLA.lat.f;
 	while(packet[i++] != ',');				// next field: longitude
 	
@@ -187,10 +205,12 @@ void nmeaProcessGPGGA(u08* packet)
 	minutesfrac = modf(GpsInfo.PosLLA.lon.f/100, &degrees);
 	GpsInfo.PosLLA.lon.f = degrees + (minutesfrac*100)/60;
 	// convert to radians
-	GpsInfo.PosLLA.lon.f *= (M_PI/180);
+	#ifdef NMEA_CONVERT_RADIANS
+	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
 	while(packet[i++] != ',');				// next field: E/W indicator
 
-	// correct latitute for E/W
+	// correct longitude for E/W
 	if(packet[i] == 'W') GpsInfo.PosLLA.lon.f = -GpsInfo.PosLLA.lon.f;
 	while(packet[i++] != ',');				// next field: position fix status
 
@@ -214,6 +234,138 @@ void nmeaProcessGPGGA(u08* packet)
 	while(packet[i++] != ',');				// next field: seperation units
 	while(packet[i++] != ',');				// next field: DGPS age
 	while(packet[i++] != ',');				// next field: DGPS station ID
+	while(packet[i++] != '*');				// next field: checksum
+}
+
+void nmeaProcessGPGLL(u08* packet)
+{
+	u08 i;
+	char* endptr;
+	double degrees, minutesfrac;
+
+	#ifdef NMEA_DEBUG_GLL
+	rprintf("NMEA: ");
+	rprintfStr(packet);
+	rprintfCRLF();
+	#endif
+
+	// start parsing just after "GPGLL,"
+	i = 6;
+	// attempt to reject empty packets right away
+	if(packet[i]==',' && packet[i+1]==',')
+		return;
+	
+	// get latitude [ddmm.mmmmm]
+	GpsInfo.PosLLA.lat.f = strtod(&packet[i], &endptr);
+	// convert to pure degrees [dd.dddd] format
+	minutesfrac = modf(GpsInfo.PosLLA.lat.f/100, &degrees);
+	GpsInfo.PosLLA.lat.f = degrees + (minutesfrac*100)/60;
+	// convert to radians
+	#ifdef NMEA_CONVERT_RADIANS
+	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
+	while(packet[i++] != ',');				// next field: N/S indicator
+	
+	// correct latitude for N/S
+	if(packet[i] == 'S') GpsInfo.PosLLA.lat.f = -GpsInfo.PosLLA.lat.f;
+	while(packet[i++] != ',');				// next field: longitude
+	
+	// get longitude [ddmm.mmmmm]
+	GpsInfo.PosLLA.lon.f = strtod(&packet[i], &endptr);
+	// convert to pure degrees [dd.dddd] format
+	minutesfrac = modf(GpsInfo.PosLLA.lon.f/100, &degrees);
+	GpsInfo.PosLLA.lon.f = degrees + (minutesfrac*100)/60;
+	// convert to radians
+	#ifdef NMEA_CONVERT_RADIANS
+	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
+	while(packet[i++] != ',');				// next field: E/W indicator
+
+	// correct longitude for E/W
+	if(packet[i] == 'W') GpsInfo.PosLLA.lon.f = -GpsInfo.PosLLA.lon.f;
+	while(packet[i++] != ',');				// next field: fix time
+
+	// get UTC time [hhmmss.sss]
+	GpsInfo.PosLLA.TimeOfFix.f = strtod(&packet[i], &endptr);
+	while(packet[i++] != ',');				// next field: fix status
+	
+	// position fix status
+	// A = Active, V = Void
+	// check for good position fix
+	if( (packet[i] != 'V') && (packet[i] != ',') )
+		GpsInfo.PosLLA.updates++;
+	while(packet[i++] != '*');				// next field: checksum
+}
+
+void nmeaProcessGPRMC(u08* packet)
+{
+	u08 i;
+	char* endptr;
+	double degrees, minutesfrac;
+
+	#ifdef NMEA_DEBUG_RMC
+	rprintf("NMEA: ");
+	rprintfStr(packet);
+	rprintfCRLF();
+	#endif
+
+	// start parsing just after "GPRMC,"
+	i = 6;
+	// attempt to reject empty packets right away
+	if(packet[i]==',' && packet[i+1]==',')
+		return;
+
+	// get UTC time [hhmmss.sss]
+	GpsInfo.PosLLA.TimeOfFix.f = strtod(&packet[i], &endptr);
+	while(packet[i++] != ',');				// next field: fix status
+	
+	// position fix status
+	// A = Active, V = Void
+	// check for good position fix
+	if( (packet[i] != 'V') && (packet[i] != ',') )
+		GpsInfo.PosLLA.updates++;
+	while(packet[i++] != ',');				// next field: latitude
+	
+	// get latitude [ddmm.mmmmm]
+	GpsInfo.PosLLA.lat.f = strtod(&packet[i], &endptr);
+	// convert to pure degrees [dd.dddd] format
+	minutesfrac = modf(GpsInfo.PosLLA.lat.f/100, &degrees);
+	GpsInfo.PosLLA.lat.f = degrees + (minutesfrac*100)/60;
+	// convert to radians
+	#ifdef NMEA_CONVERT_RADIANS
+	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
+	while(packet[i++] != ',');				// next field: N/S indicator
+	
+	// correct latitude for N/S
+	if(packet[i] == 'S') GpsInfo.PosLLA.lat.f = -GpsInfo.PosLLA.lat.f;
+	while(packet[i++] != ',');				// next field: longitude
+	
+	// get longitude [ddmm.mmmmm]
+	GpsInfo.PosLLA.lon.f = strtod(&packet[i], &endptr);
+	// convert to pure degrees [dd.dddd] format
+	minutesfrac = modf(GpsInfo.PosLLA.lon.f/100, &degrees);
+	GpsInfo.PosLLA.lon.f = degrees + (minutesfrac*100)/60;
+	// convert to radians
+	#ifdef NMEA_CONVERT_RADIANS
+	GpsInfo.PosLLA.lat.f *= (M_PI/180);
+	#endif
+	while(packet[i++] != ',');				// next field: E/W indicator
+
+	// correct longitude for E/W
+	if(packet[i] == 'W') GpsInfo.PosLLA.lon.f = -GpsInfo.PosLLA.lon.f;
+	while(packet[i++] != ',');				// next field: speed in knots
+	
+	// get speed in knots
+	GpsInfo.VelHS.speed.f = strtod(&packet[i], &endptr);
+	while(packet[i++] != ',');				// next field: true track angle
+	
+	// get course (true north ref) in degrees [ddd.dd]
+	GpsInfo.VelHS.heading.f = strtod(&packet[i], &endptr);
+	while(packet[i++] != ',');				// next field: date
+
+	while(packet[i++] != ',');				// next field: magnetic variation
+	while(packet[i++] != ',');				// next field: Variation direction 'E' or 'W'
 	while(packet[i++] != '*');				// next field: checksum
 }
 
@@ -245,12 +397,12 @@ void nmeaProcessGPVTG(u08* packet)
 	while(packet[i++] != ',');				// next field: speed (knots)
 
 	// get speed in knots
-	//GpsInfo.VelHS.speed.f = strtod(&packet[i], &endptr);
+	GpsInfo.VelHS.speed.f = strtod(&packet[i], &endptr);
 	while(packet[i++] != ',');				// next field: 'N'
 	while(packet[i++] != ',');				// next field: speed (km/h)
 
 	// get speed in km/h
-	GpsInfo.VelHS.speed.f = strtod(&packet[i], &endptr);
+	//GpsInfo.VelHS.speed.f = strtod(&packet[i], &endptr);
 	while(packet[i++] != ',');				// next field: 'K'
 	while(packet[i++] != '*');				// next field: checksum
 

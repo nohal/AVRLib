@@ -56,6 +56,8 @@ void nmeaInit(void);
 u08* nmeaGetPacketBuffer(void);
 u08 nmeaProcess(cBuffer* rxBuffer);
 void nmeaProcessGPGGA(u08* packet);
+void nmeaProcessGPGLL(u08* packet);
+void nmeaProcessGPRMC(u08* packet);
 void nmeaProcessGPVTG(u08* packet);
 
 #endif
