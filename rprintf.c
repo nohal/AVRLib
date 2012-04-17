@@ -283,8 +283,10 @@ void rprintfFloat(char numDigits, double x)
 	// print polarity character
 	if(negative)
 		rprintfChar('-');
+	#ifdef POSITIVE_SIGN
 	else
 		rprintfChar('+');
+	#endif
 
 	// print digits
 	for(i=0; i<numDigits; i++)
@@ -373,6 +375,27 @@ int rprintf1RamRom(unsigned char stringInRom, const char *format, ...)
 
 
 #ifdef RPRINTF_COMPLEX
+
+unsigned char Isdigit(char c)
+{
+	if((c >= 0x30) && (c <= 0x39))
+		return TRUE;
+	else
+		return FALSE;
+}
+
+int atoiRamRom(unsigned char stringInRom, char *str)
+{
+	int num = 0;;
+
+	while(Isdigit(READMEMBYTE(stringInRom,str)))
+	{
+		num *= 10;
+		num += ((READMEMBYTE(stringInRom,str++)) - 0x30);
+	}
+	return num;
+}
+
 // *** rprintf2RamRom ***
 // called by rprintf() - does a more powerful printf (supports %d, %u, %o, %x, %c, %s)
 // Supports:
@@ -566,26 +589,6 @@ int rprintf2RamRom(unsigned char stringInRom, const char *sfmt, ...)
 
 	va_end(ap);
 	return 0;
-}
-
-unsigned char Isdigit(char c)
-{
-	if((c >= 0x30) && (c <= 0x39))
-		return TRUE;
-	else
-		return FALSE;
-}
-
-int atoiRamRom(unsigned char stringInRom, char *str)
-{
-	int num = 0;;
-
-	while(Isdigit(READMEMBYTE(stringInRom,str)))
-	{
-		num *= 10;
-		num += ((READMEMBYTE(stringInRom,str++)) - 0x30);
-	}
-	return num;
 }
 
 #endif

@@ -53,6 +53,7 @@
 
 // Define RPRINTF_FLOAT to enable the floating-point printf function: rprintfFloat()
 // (adds +4600bytes or 2.2Kwords of code)
+#define RPRINTF_FLOAT
 
 // defines/constants
 #define STRING_IN_RAM	0
